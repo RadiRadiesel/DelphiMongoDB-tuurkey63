@@ -333,6 +333,9 @@ type
     { Issue a command against the MongoDB instance that returns a cursor. }
     function AdminCommand(CommandToIssue: tWriteCmd): igoMongoCursor;
 
+    { Issue an Aggregation command against the MongoDB that returns a cursor. }
+    function Aggregate(ACollection : String; APipeline : TgoBsonArray): igoMongoCursor;
+
     { Issue a command against the database that returns a cursor.
       Similar to AdminCommand. }
     function Command(CommandToIssue: tWriteCmd): igoMongoCursor;
@@ -922,6 +925,8 @@ type
     function RenameCollection(const AFromNamespace, AToNamespace: string; const ADropTarget: Boolean = false): Boolean;
     function GetDbStats(const AScale: Integer): TgoMongoStatistics;
     function Command(CommandToIssue: tWriteCmd): igoMongoCursor;
+    function Aggregate(ACollection : String; APipeline : TgoBsonArray): igoMongoCursor;
+
     function AdminCommand(CommandToIssue: tWriteCmd): igoMongoCursor;
 
   protected
@@ -1477,6 +1482,36 @@ begin
   SpecifyDB(Writer);
   SpecifyReadPreference(Writer);
   Writer.WriteEndDocument;
+  Reply := Protocol.OpMsg(Writer.ToBson, nil);
+  HandleCommandReply(Reply);
+  Result := CreateCursor(Reply.FirstDoc, FProtocol, GetReadPreference);
+end;
+
+// https://www.mongodb.com/docs/manual/reference/command/aggregate/
+function TgoMongoDatabase.Aggregate(ACollection : String;
+  APipeline : TgoBsonArray): igoMongoCursor;
+var
+  Writer: IgoBsonWriter;
+  Reply: IgoMongoReply;
+begin
+  Writer := TgoBsonWriter.Create;
+  Writer.WriteStartDocument;
+
+  // the aggregation collection
+  Writer.WriteString('aggregate', ACollection);
+
+  // the aggregation pipeline array
+  Writer.WriteName('pipeline');
+  Writer.WriteValue(APipeline);
+
+  // add a default (empty) cursor (batchSize not working)
+  Writer.WriteName('cursor');
+  Writer.WriteValue(TgoBsonDocument.Create());
+
+  SpecifyDB(Writer);
+  SpecifyReadPreference(Writer);
+  Writer.WriteEndDocument;
+
   Reply := Protocol.OpMsg(Writer.ToBson, nil);
   HandleCommandReply(Reply);
   Result := CreateCursor(Reply.FirstDoc, FProtocol, GetReadPreference);
